@@ -1,5 +1,6 @@
 import Control.Applicative ((<$>))
 import Control.Monad (foldM, liftM2)
+import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import System.Environment (getArgs)
 import System.IO (Handle, IOMode(ReadMode), hGetContents, openFile)
@@ -57,5 +58,6 @@ randomRNotInList range excluded
         baseCandidate = getStdRandom (randomR range)
         offSet :: IO Int
         offSet = liftM2 count ((>=) <$> baseCandidate) (return excluded)
-        count :: (a -> Bool) -> [a] -> Int
-        count f = length . (filter f)
+
+count :: (a -> Bool) -> [a] -> Int
+count p = foldl' (\accum x -> if (p x) then (accum + 1) else accum) 0
