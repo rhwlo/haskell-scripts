@@ -61,4 +61,4 @@ randomRNotInList range excluded
 count :: (a -> Bool)                -- a predicate function to tell whether an element should count
       -> [a]                        -- a list of elements to potentially count
       -> Int                        -- the number of elements that matched the predicate function
-count p = foldl' (\accum x -> if (p x) then (accum + 1) else accum) 0
+count p = sum . (map (fromEnum . p))
