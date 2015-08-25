@@ -8,14 +8,13 @@ import System.Random (getStdRandom, randomR)
 
 main :: IO ()
 main = do
-    (sampleSizeStr:_) <- getArgs
-    fh <- openFile "/usr/share/dict/words" ReadMode
-    theseWords <- readWords fh
-    chosenWords <- sample (read sampleSizeStr) theseWords
-    putStr (unlines chosenWords)
+    (sampleSize:_) <- getArgs
+    dictionaryWords >>= sample (read sampleSize) >>= putStr . unlines
   where
     readWords :: Handle -> IO [String]
     readWords = (fmap lines) . hGetContents
+    dictionaryWords :: IO [String]
+    dictionaryWords = openFile "/usr/share/dict/words" ReadMode >>= readWords
 
 sample :: Int                       -- the sample size to take
        -> [a]                       -- the list of elements to sample from
