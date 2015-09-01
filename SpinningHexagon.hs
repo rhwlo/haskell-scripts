@@ -8,9 +8,15 @@ main = do
   (_, _) <- getArgsAndInitialize
   _window <- createWindow "hexagons are pretty cool"
   angle <- newIORef 0.0
+  direction <- newIORef 1.0
   displayCallback $= display angle
-  idleCallback $= Just (idle angle)
+  keyboardMouseCallback $= Just (keyboardMouse direction)
+  idleCallback $= Just (idle angle direction)
   mainLoop
+
+keyboardMouse :: IORef GLfloat -> KeyboardMouseCallback
+keyboardMouse direction (MouseButton LeftButton) Down _ _ = direction $~! negate
+keyboardMouse _ _ _ _ _ = return ()
 
 display :: IORef GLfloat          -- the angle to rotate the hexagon to
         -> DisplayCallback        -- idek, some kind of Haskell magic
@@ -34,9 +40,10 @@ display angle = do
             ((0.8, 0, 0.4), [(0, 0, 0)] ++ [(sin (phi k), cos (phi k), 0) | k <- [5..6]]),
             ((0.9, 0, 0.3), [(0, 0, 0)] ++ [(sin (phi k), cos (phi k), 0) | k <- [6..7]]) ]
 
-idle :: IORef GLfloat -> IdleCallback
-idle angle = do
-  angle $~! (+ 0.001)
+idle :: IORef GLfloat -> IORef GLfloat -> IdleCallback
+idle angle wrappedDirection = do
+  direction <- get wrappedDirection
+  angle $~! (+ (0.001 * direction))
   postRedisplay Nothing
 
 polygonFromTuples :: (GL3Tuple, [GL3Tuple]) -- a 3-tuple for color and a list of 3-tuples for vertices
