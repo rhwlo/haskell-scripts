@@ -1,11 +1,19 @@
-import Control.Applicative ((<$>), (<*>))
-import Data.Fixed (mod')
-import Data.List (sort)
-import Data.IORef
+import Data.List (foldl')
+import Data.Monoid (Monoid, mappend, mconcat, mempty)
 import Graphics.UI.GLUT
-import Local.GLUTHelpers (ColoredPolygonT, GL3T, drawScaledPolygonFT)
+import Local.GLUTHelpers (GL3T, drawScaledPolygonFT)
 
-type GL2T = (GLfloat, GLfloat)
+data HexCoordinate = HexC GLfloat GLfloat deriving (Show, Eq)
+instance Monoid HexCoordinate where
+  mempty = HexC 0 0
+  mappend (HexC x y) (HexC x' y') = HexC (x + x') (y + y')
+  mconcat = foldl' mappend mempty
+
+data CartCoordinate = CartC GLfloat GLfloat deriving (Show, Eq)
+instance Monoid CartCoordinate where
+  mempty = CartC 0 0
+  mappend (CartC x y) (CartC x' y') = CartC (x + x') (y + y')
+  mconcat = foldl' mappend mempty
 
 main :: IO ()
 main = do
@@ -20,54 +28,48 @@ display = do
     size <- get windowSize
     fillWithHexagons size 60
     flush
-  where
-    hex :: ColoredPolygonT
-    hex = let r = 60
-      in ((phiSinebow 1), map (\phi -> (r * (sin phi), r * (cos phi), 0)) [n * pi / 3 | n <- [0..5]])
 
 hexToCartesian :: GLfloat                   -- the unit-radius for a hexagon
-               -> GL2T                      -- the point's (hexX, hexY)
-               -> GL2T                      -- the cartesian (x, y)
-hexToCartesian radius (hexX, hexY) = let
+               -> HexCoordinate             -- the hexagonal coordinate to convert
+               -> CartCoordinate            -- the cartesian coordinate resulting
+hexToCartesian radius (HexC hexX hexY) = let
     shortRadius = radius * 3 ** 0.5 / 2
     y :: GLfloat
     y = shortRadius * (2 * hexY + hexX)
     x :: GLfloat
     x = 3 / 2 * radius * hexX
-  in (x, y)
+  in CartC x y
 
 fillWithHexagons :: Size -> GLfloat -> IO ()
 fillWithHexagons (Size width height) radius = do
-    mapM_ drawHexagonAt coordinatesList
+    mapM_ drawHexagonAt hexCoordinateList
   where
-    -- at the origin, calculate the maximum x and y
-    xMaxOrigin = ceiling ((fromIntegral width) / (radius * 3 / 2))
-    --xRange = [(negate xMaxOrigin)..xMaxOrigin]
---    xRange = [0..2]
-    hexSize = (5, 11)
-    xMax = ceiling ((fromIntegral (fst hexSize) - 1) / 2)
-    yMax = ceiling ((fromIntegral (snd hexSize) - 1) / 2)
-    xRange = [(negate xMax)..xMax]
-    ySize = 2 * yMax
-    coordinatesList :: [GL2T]
-    coordinatesList = xRange >>= getColumn
-    getColumn :: Integral a => a              -- the column number (hexX)
-              -> [GL2T]                       -- a list of (hexX, hexY) values for that column
-    getColumn x = let
-        yMin = (negate (yMax + ((x + 1) `div` 2)))
-        localYMax = yMin + (ySize + (x `mod` 2))
-        yRange = [yMin..localYMax]
-      in [(fromIntegral x, fromIntegral y) | y <- yRange]
-    drawHexagonAt :: GL2T                     -- the (hexX, hexY) coordinates at which to draw a hex
+    yPackingRadius :: GLfloat
+    yPackingRadius = radius * sqrt(3) / 2
+    xPackingRadius :: GLfloat
+    xPackingRadius = radius * 3/4
+    yOriginMax = ((fromIntegral height) - yPackingRadius) / (2 * yPackingRadius)
+    ySize = yOriginMax * 2
+    xMax = ((fromIntegral width) - xPackingRadius) / (2 * xPackingRadius)
+    xRange :: [Int]
+    xRange = [(negate (ceiling xMax))..(ceiling xMax)]
+    hexCoordinateList :: [HexCoordinate]
+    hexCoordinateList = xRange >>= \x -> let
+        yMin = negate (ceiling yOriginMax + (div x 2) + (mod x 2))
+        yMax = yMin + ceiling ySize + (mod x 2)
+        yRange = [yMin..yMax]
+      in [HexC (fromIntegral x) (fromIntegral y) | y <- yRange ]
+    drawHexagonAt :: HexCoordinate            -- the (hexX, hexY) coordinates at which to draw a hex
                   -> IO ()                    -- the rendered hexagon
-    drawHexagonAt (hexX, hexY) = let
-        (x, y) = hexToCartesian radius (hexX, hexY)
+    drawHexagonAt hexCoordinate = let
+        (HexC hexX hexY) = hexCoordinate
+        cartCoordinate = hexToCartesian radius hexCoordinate
       in
-        drawScaledPolygonFT (Size width height) $ (phiSinebow (floor (hexX + 3 * hexY)), hexagonVerticesFor (x, y))
+        drawScaledPolygonFT (Size width height) $ (phiSinebow (floor (hexX + 3 * hexY)), hexagonVerticesFor cartCoordinate)
       where
-        hexagonVerticesFor :: GL2T            -- the cartesian (x, y) coordinates
+        hexagonVerticesFor :: CartCoordinate  -- the cartesian (x, y) coordinates
                            -> [GL3T]          -- the list of 3-tuple (x, y, z) coordinates for Vertex3
-        hexagonVerticesFor (x, y) = map (\phi -> (x + radius * (cos phi), y + radius * (sin phi), 0)) [n * pi / 3 | n <- [0..5]]
+        hexagonVerticesFor (CartC x y) = map (\phi -> (x + radius * (cos phi), y + radius * (sin phi), 0)) [n * pi / 3 | n <- [0..5]]
 
 sinebow :: GLfloat      -- a float to convert to a sinebow color
         -> GL3T         -- a 3-tuple of color. See http://basecase.org/env/on-rainbows
@@ -78,7 +80,7 @@ sinebow n = (red, green, blue)
     green = (sin ((n + 1 / 3) * scaling)) ** 2
     blue = (sin ((n + 2 / 3) * scaling)) ** 2
 
-phiSinebow :: Integral a => a   -- an integral number to choose the nth color from the sinebow
+phiSinebow :: Integer           -- an integer to choose the nth color from the sinebow
            -> GL3T              -- the nth color from the sinebow. See same as `sinebow`
 phiSinebow n = let phi = 1 + 2 ** 0.5
   in sinebow (fromIntegral n * phi)
