@@ -1,19 +1,27 @@
+import Control.Applicative ((<$>))
 import Data.List (foldl')
-import Data.Monoid (Monoid, mappend, mconcat, mempty)
+import Data.Monoid (Monoid, mappend, mconcat, mempty, (<>))
 import Graphics.UI.GLUT
 import Local.GLUTHelpers (GL3T, drawScaledPolygonFT)
+
+class GL3Table g where
+  toGL3T :: g -> GL3T
 
 data HexCoordinate = HexC GLfloat GLfloat deriving (Show, Eq)
 instance Monoid HexCoordinate where
   mempty = HexC 0 0
   mappend (HexC x y) (HexC x' y') = HexC (x + x') (y + y')
   mconcat = foldl' mappend mempty
+instance GL3Table HexCoordinate where
+  toGL3T = toGL3T . (hexToCartesian 1)
 
 data CartCoordinate = CartC GLfloat GLfloat deriving (Show, Eq)
 instance Monoid CartCoordinate where
   mempty = CartC 0 0
   mappend (CartC x y) (CartC x' y') = CartC (x + x') (y + y')
   mconcat = foldl' mappend mempty
+instance GL3Table CartCoordinate where
+  toGL3T (CartC x y) = (x, y, 0)
 
 main :: IO ()
 main = do
@@ -67,9 +75,12 @@ fillWithHexagons (Size width height) radius = do
       in
         drawScaledPolygonFT (Size width height) $ (phiSinebow (floor (hexX + 3 * hexY)), hexagonVerticesFor cartCoordinate)
       where
-        hexagonVerticesFor :: CartCoordinate  -- the cartesian (x, y) coordinates
+        hexagonVerticesFor :: CartCoordinate  -- a CartCoordinate for the position of the center
                            -> [GL3T]          -- the list of 3-tuple (x, y, z) coordinates for Vertex3
-        hexagonVerticesFor (CartC x y) = map (\phi -> (x + radius * (cos phi), y + radius * (sin phi), 0)) [n * pi / 3 | n <- [0..5]]
+        hexagonVerticesFor cartCenter = toGL3T <$> (((<>) cartCenter) <$> unitHexagon)
+          where
+            unitHexagon :: [CartCoordinate]
+            unitHexagon = [CartC (radius * (cos phi)) (radius * (sin phi)) | phi <- [0,(pi/3)..(5*pi/3)]]
 
 sinebow :: GLfloat      -- a float to convert to a sinebow color
         -> GL3T         -- a 3-tuple of color. See http://basecase.org/env/on-rainbows
